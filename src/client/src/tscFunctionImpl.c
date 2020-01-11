@@ -911,6 +911,17 @@ static void minMax_function(SQLFunctionCtx *pCtx, char *pOutput, int32_t isMin, 
       index = pCtx->preAggVals.maxIndex;
     }
 
+    /**
+     * NOTE: work around the bug caused by invalid pre-calculated function.
+     * Here the selectivity + ts will not return correct value.
+     *
+     * The following codes of 3 lines will be removed later.
+     */
+    if (index < 0 || index >= pCtx->size + pCtx->startOffset) {
+      index = 0;
+    }
+
+
     TSKEY key = pCtx->ptsList[index];
 
     if (pCtx->inputType >= TSDB_DATA_TYPE_TINYINT && pCtx->inputType <= TSDB_DATA_TYPE_BIGINT) {
@@ -3834,12 +3845,12 @@ static void getStatics_f(int64_t *primaryKey, float *data, int32_t numOfRow, dou
     dsum += fv;
     if (fmin > fv) {
       fmin = fv;
-      minIndex = i;
+      *minIndex = i;
     }
 
     if (fmax < fv) {
       fmax = fv;
-      maxIndex = i;
+      *maxIndex = i;
     }
 
     //    if (isNull(&lastVal, TSDB_DATA_TYPE_FLOAT)) {
@@ -3887,12 +3898,12 @@ static void getStatics_d(int64_t *primaryKey, double *data, int32_t numOfRow, do
     dsum += dv;
     if (dmin > dv) {
       dmin = dv;
-      minIndex = i;
+      *minIndex = i;
     }
 
     if (dmax < dv) {
       dmax = dv;
-      maxIndex = i;
+      *maxIndex = i;
     }
 
     //    if (isNull(&lastVal, TSDB_DATA_TYPE_DOUBLE)) {
