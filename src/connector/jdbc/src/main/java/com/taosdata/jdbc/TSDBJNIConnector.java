@@ -22,8 +22,8 @@ public class TSDBJNIConnector {
     static volatile Boolean isInitialized = false;
 
     static {
-        System.loadLibrary("taos");
         System.out.println("java.library.path:" + System.getProperty("java.library.path"));
+        System.loadLibrary("taos");
     }
 
     /**
