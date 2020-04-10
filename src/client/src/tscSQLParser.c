@@ -1931,7 +1931,7 @@ void getRevisedName(char* resultFieldName, int32_t functionId, int32_t maxLen, c
   snprintf(resultFieldName, maxLen, "%s(%s)", aAggs[functionId].aName, columnName);
 }
 
-static bool isTablenameToken(SSQLToken* token) {
+static bool isTableNameToken(SSQLToken* token) {
   SSQLToken tmpToken = *token;
   SSQLToken tableToken = {0};
 
@@ -1965,7 +1965,7 @@ int32_t doGetColumnIndexByName(SSQLToken* pToken, SQueryInfo* pQueryInfo, SColum
   const char* msg0 = "ambiguous column name";
   const char* msg1 = "invalid column name";
 
-  if (isTablenameToken(pToken)) {
+  if (isTableNameToken(pToken)) {
     pIndex->columnIndex = TSDB_TBNAME_COLUMN_INDEX;
   } else if (strncasecmp(pToken->z, DEFAULT_PRIMARY_TIMESTAMP_COL_NAME, pToken->n) == 0) {
     pIndex->columnIndex = PRIMARYKEY_TIMESTAMP_COL_INDEX;
@@ -2790,8 +2790,8 @@ static int32_t optrToString(tSQLExpr* pExpr, char** exprString) {
   return TSDB_CODE_SUCCESS;
 }
 
-static int32_t tablenameListToString(tSQLExpr* pExpr, SStringBuilder* sb) {
-  tSQLExprList* pList = pExpr->pParam;
+static int32_t tableNameListToString(const tSQLExpr* pExpr, SStringBuilder* sb) {
+  const tSQLExprList* pList = pExpr->pParam;
   if (pList->nExpr <= 0) {
     return TSDB_CODE_INVALID_SQL;
   }
@@ -2801,7 +2801,7 @@ static int32_t tablenameListToString(tSQLExpr* pExpr, SStringBuilder* sb) {
   }
 
   for (int32_t i = 0; i < pList->nExpr; ++i) {
-    tSQLExpr* pSub = pList->a[i].pNode;
+    const tSQLExpr* pSub = pList->a[i].pNode;
     taosStringBuilderAppendStringLen(sb, pSub->val.pz, pSub->val.nLen);
 
     if (i < pList->nExpr - 1) {
@@ -2816,7 +2816,7 @@ static int32_t tablenameListToString(tSQLExpr* pExpr, SStringBuilder* sb) {
   return TSDB_CODE_SUCCESS;
 }
 
-static int32_t tablenameCondToString(tSQLExpr* pExpr, SStringBuilder* sb) {
+static int32_t tableNameCondToString(const tSQLExpr* pExpr, SStringBuilder* sb) {
   taosStringBuilderAppendStringLen(sb, QUERY_COND_REL_PREFIX_LIKE, QUERY_COND_REL_PREFIX_LIKE_LEN);
   taosStringBuilderAppendString(sb, pExpr->val.pz);
 
@@ -2920,7 +2920,7 @@ static int32_t getTagCondString(tSQLExpr* pExpr, char** str) {
   return tSQLExprLeafToString(pExpr, true, str);
 }
 
-static int32_t getTablenameCond(SQueryInfo* pQueryInfo, tSQLExpr* pTableCond, SStringBuilder* sb) {
+static int32_t getTableNameCond(SQueryInfo* pQueryInfo, tSQLExpr* pTableCond, SStringBuilder* sb) {
   const char* msg0 = "invalid table name list";
 
   if (pTableCond == NULL) {
@@ -2930,16 +2930,16 @@ static int32_t getTablenameCond(SQueryInfo* pQueryInfo, tSQLExpr* pTableCond, SS
   tSQLExpr* pLeft = pTableCond->pLeft;
   tSQLExpr* pRight = pTableCond->pRight;
 
-  if (!isTablenameToken(&pLeft->colInfo)) {
+  if (!isTableNameToken(&pLeft->colInfo)) {
     return TSDB_CODE_INVALID_SQL;
   }
 
   int32_t ret = TSDB_CODE_SUCCESS;
 
   if (pTableCond->nSQLOptr == TK_IN) {
-    ret = tablenameListToString(pRight, sb);
+    ret = tableNameListToString(pRight, sb);
   } else if (pTableCond->nSQLOptr == TK_LIKE) {
-    ret = tablenameCondToString(pRight, sb);
+    ret = tableNameCondToString(pRight, sb);
   }
 
   if (ret != TSDB_CODE_SUCCESS) {
@@ -3324,7 +3324,7 @@ static int32_t handleExprInQueryCond(SQueryInfo* pQueryInfo, tSQLExpr** pExpr, S
 
       SSchema* pSchema = tscGetTableSchema(pTableMetaInfo->pTableMeta);
 
-      if ((!isTablenameToken(&pLeft->colInfo)) && pSchema[index.columnIndex].type != TSDB_DATA_TYPE_BINARY &&
+      if ((!isTableNameToken(&pLeft->colInfo)) && pSchema[index.columnIndex].type != TSDB_DATA_TYPE_BINARY &&
           pSchema[index.columnIndex].type != TSDB_DATA_TYPE_NCHAR) {
         return invalidSqlErrMsg(pQueryInfo->msg, msg2);
       }
@@ -3799,7 +3799,7 @@ int32_t parseWhereClause(SQueryInfo* pQueryInfo, tSQLExpr** pExpr, SSqlObj* pSql
   }
 
   // 4. get the table name query condition
-  if ((ret = getTablenameCond(pQueryInfo, condExpr.pTableCond, &sb)) != TSDB_CODE_SUCCESS) {
+  if ((ret = getTableNameCond(pQueryInfo, condExpr.pTableCond, &sb)) != TSDB_CODE_SUCCESS) {
     return ret;
   }
 
