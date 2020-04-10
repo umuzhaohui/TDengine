@@ -81,6 +81,8 @@ int main(int argc, char** argv) {
 */
 typedef struct {
   jmp_buf jb;
+  void*   (*allocator)(void*, size_t);
+  bool    network;
   char*   data;
   size_t  pos;
   size_t  size;
@@ -88,20 +90,23 @@ typedef struct {
 
 // common functions can be used in both read & write
 #define tbufThrowError(buf, code) longjmp((buf)->jb, (code))
+#define tbufSetNetworkEndian(buf) ((buf)->network = true)
+#define tbufSetHostEndian(buf) ((buf)->network = false)
+#define tbufSetAllocator(buf, allocator_) ((buf)->allocator = (allocator_))
 size_t tbufTell(SBuffer* buf);
 size_t tbufSeekTo(SBuffer* buf, size_t pos);
 size_t tbufSkip(SBuffer* buf, size_t size);
 void   tbufClose(SBuffer* buf, bool keepData);
 
 // basic read functions
-#define tbufBeginRead(buf, _data, len) ((buf)->data = (char*)(_data), ((buf)->pos = 0), ((buf)->size = ((_data) == NULL) ? 0 : (len)), setjmp((buf)->jb))
+#define tbufBeginRead(buf, data_, len) ((buf)->allocator = realloc, (buf)->network = false, (buf)->data = (char*)(data_), ((buf)->pos = 0), ((buf)->size = ((data_) == NULL) ? 0 : (len)), setjmp((buf)->jb))
 char*       tbufRead(SBuffer* buf, size_t size);
 void        tbufReadToBuffer(SBuffer* buf, void* dst, size_t size);
 const char* tbufReadString(SBuffer* buf, size_t* len);
 size_t      tbufReadToString(SBuffer* buf, char* dst, size_t size);
 
 // basic write functions
-#define tbufBeginWrite(buf) ((buf)->data = NULL, ((buf)->pos = 0), ((buf)->size = 0), setjmp((buf)->jb))
+#define tbufBeginWrite(buf) ((buf)->allocator = realloc, (buf)->network = false, (buf)->data = NULL, ((buf)->pos = 0), ((buf)->size = 0), setjmp((buf)->jb))
 void  tbufEnsureCapacity(SBuffer* buf, size_t size);
 char* tbufGetData(SBuffer* buf, bool takeOver);
 void  tbufWrite(SBuffer* buf, const void* data, size_t size);
@@ -109,26 +114,54 @@ void  tbufWriteAt(SBuffer* buf, size_t pos, const void* data, size_t size);
 void  tbufWriteStringLen(SBuffer* buf, const char* str, size_t len);
 void  tbufWriteString(SBuffer* buf, const char* str);
 
-// read & write function for primitive types
-#ifndef TBUFFER_DEFINE_FUNCTION
-#define TBUFFER_DEFINE_FUNCTION(type, name) \
-  type tbufRead##name(SBuffer* buf); \
-  void tbufWrite##name(SBuffer* buf, type data); \
-  void tbufWrite##name##At(SBuffer* buf, size_t pos, type data);
-#endif
+// read / write functions for primitive types
+bool tbufReadBool(SBuffer* buf);
+void tbufWriteBool(SBuffer* buf, bool data);
+void tbufWriteBoolAt(SBuffer* buf, size_t pos, bool data);
 
-TBUFFER_DEFINE_FUNCTION(bool, Bool)
-TBUFFER_DEFINE_FUNCTION(char, Char)
-TBUFFER_DEFINE_FUNCTION(int8_t, Int8)
-TBUFFER_DEFINE_FUNCTION(uint8_t, Unt8)
-TBUFFER_DEFINE_FUNCTION(int16_t, Int16)
-TBUFFER_DEFINE_FUNCTION(uint16_t, Uint16)
-TBUFFER_DEFINE_FUNCTION(int32_t, Int32)
-TBUFFER_DEFINE_FUNCTION(uint32_t, Uint32)
-TBUFFER_DEFINE_FUNCTION(int64_t, Int64)
-TBUFFER_DEFINE_FUNCTION(uint64_t, Uint64)
-TBUFFER_DEFINE_FUNCTION(float, Float)
-TBUFFER_DEFINE_FUNCTION(double, Double)
+char tbufReadChar(SBuffer* buf);
+void tbufWriteChar(SBuffer* buf, char data);
+void tbufWriteCharAt(SBuffer* buf, size_t pos, char data);
+
+int8_t tbufReadInt8(SBuffer* buf);
+void tbufWriteInt8(SBuffer* buf, int8_t data);
+void tbufWriteInt8At(SBuffer* buf, size_t pos, int8_t data);
+
+uint8_t tbufReadUint8(SBuffer* buf);
+void tbufWriteUint8(SBuffer* buf, uint8_t data);
+void tbufWriteUint8At(SBuffer* buf, size_t pos, uint8_t data);
+
+int16_t tbufReadInt16(SBuffer* buf);
+void tbufWriteInt16(SBuffer* buf, int16_t data);
+void tbufWriteInt16At(SBuffer* buf, size_t pos, int16_t data);
+
+uint16_t tbufReadUint16(SBuffer* buf);
+void tbufWriteUint16(SBuffer* buf, uint16_t data);
+void tbufWriteUint16At(SBuffer* buf, size_t pos, uint16_t data);
+
+int32_t tbufReadInt32(SBuffer* buf);
+void tbufWriteInt32(SBuffer* buf, int32_t data);
+void tbufWriteInt32At(SBuffer* buf, size_t pos, int32_t data);
+
+uint32_t tbufReadUint32(SBuffer* buf);
+void tbufWriteUint32(SBuffer* buf, uint32_t data);
+void tbufWriteUint32At(SBuffer* buf, size_t pos, uint32_t data);
+
+int64_t tbufReadInt64(SBuffer* buf);
+void tbufWriteInt64(SBuffer* buf, int64_t data);
+void tbufWriteInt64At(SBuffer* buf, size_t pos, int64_t data);
+
+uint64_t tbufReadUint64(SBuffer* buf);
+void tbufWriteUint64(SBuffer* buf, uint64_t data);
+void tbufWriteUint64At(SBuffer* buf, size_t pos, uint64_t data);
+
+float tbufReadFloat(SBuffer* buf);
+void tbufWriteFloat(SBuffer* buf, float data);
+void tbufWriteFloatAt(SBuffer* buf, size_t pos, float data);
+
+double tbufReadDouble(SBuffer* buf);
+void tbufWriteDouble(SBuffer* buf, double data);
+void tbufWriteDoubleAt(SBuffer* buf, size_t pos, double data);
 
 #ifdef __cplusplus
 }
