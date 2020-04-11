@@ -94,7 +94,7 @@ uint8_t getBinaryExprOptr(SSQLToken *pToken);
 
 SBuffer exprTreeToBinary(tExprNode* pExprTree);
 
-tExprNode* exprTreeFromBinary(const void* pBuf, size_t size);
+tExprNode* exprTreeFromBinary(void* pBuf, size_t size);
 
 #ifdef __cplusplus
 }

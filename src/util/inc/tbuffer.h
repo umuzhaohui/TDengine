@@ -28,13 +28,20 @@ SBuffer can be used to read or write a buffer, but cannot be used for both
 read & write at a same time. Below is an example:
 
 int main(int argc, char** argv) {
-  //--------------------- write ------------------------
-  SBuffer wbuf;
-  int32_t code = tbufBeginWrite(&wbuf);
+  jmp_buf jb;
+  SBuffer wbuf, rbuf;
+
+  int32_t code = setjmp(jb);
   if (code != 0) {
-    // handle errors
+    printf("you will see this message after print out 5 integers and a string.\n");
+    tbufClose(&rbuf, false);
     return 0;
   }
+
+
+  //--------------------- write ------------------------
+  tbufSetup(&wbuf, &jb, NULL, false);
+  tbufBeginWrite(&wbuf);
 
   // reserve 1024 bytes for the buffer to improve performance
   tbufEnsureCapacity(&wbuf, 1024);
@@ -54,13 +61,8 @@ int main(int argc, char** argv) {
 
 
   //------------------------ read -----------------------
-  SBuffer rbuf;
-  code = tbufBeginRead(&rbuf, data, size);
-  if (code != 0) {
-    printf("you will see this message after print out 5 integers and a string.\n");
-    tbufClose(&rbuf, false);
-    return 0;
-  }
+  tbufSetup(&rbuf, &jb, NULL, false);
+  tbufBeginRead(&rbuf, data, size);
 
   // read & print out 5 integers
   for (int i = 0; i < 5; i++) {
@@ -68,7 +70,7 @@ int main(int argc, char** argv) {
   }
 
   // read & print out a string
-  printf(tbufReadString(&rbuf, NULL));
+  puts(tbufReadString(&rbuf, NULL));
 
   // try read another integer, this result in an error as there no this integer
   tbufReadInt32(&rbuf);
@@ -80,39 +82,50 @@ int main(int argc, char** argv) {
 }
 */
 typedef struct {
-  jmp_buf jb;
+  jmp_buf* jb;
   void*   (*allocator)(void*, size_t);
-  bool    network;
+  bool    endian;
   char*   data;
   size_t  pos;
   size_t  size;
 } SBuffer;
 
 // common functions can be used in both read & write
-#define tbufThrowError(buf, code) longjmp((buf)->jb, (code))
-#define tbufSetNetworkEndian(buf) ((buf)->network = true)
-#define tbufSetHostEndian(buf) ((buf)->network = false)
-#define tbufSetAllocator(buf, allocator_) ((buf)->allocator = (allocator_))
+
+// tbufSetup setup the buffer, should be called before tbufBeginRead / tbufBeginWrite
+// *jb*, the jmp_buf for error handling, caller must provide a valid jmp_buf
+// *allocator*, function to allocate memory, will use 'realloc' if NULL
+// *endian*, if true, read/write functions of primitive types will do 'ntoh' or 'hton' automatically
+void   tbufSetup(SBuffer* buf, jmp_buf* jb, void* (*allocator)(void*, size_t), bool endian);
+void   tbufThrowError(SBuffer* buf, int32_t code);
 size_t tbufTell(SBuffer* buf);
 size_t tbufSeekTo(SBuffer* buf, size_t pos);
 size_t tbufSkip(SBuffer* buf, size_t size);
 void   tbufClose(SBuffer* buf, bool keepData);
 
 // basic read functions
-#define tbufBeginRead(buf, data_, len) ((buf)->allocator = realloc, (buf)->network = false, (buf)->data = (char*)(data_), ((buf)->pos = 0), ((buf)->size = ((data_) == NULL) ? 0 : (len)), setjmp((buf)->jb))
+void        tbufBeginRead(SBuffer* buf, void* data, size_t len);
 char*       tbufRead(SBuffer* buf, size_t size);
 void        tbufReadToBuffer(SBuffer* buf, void* dst, size_t size);
 const char* tbufReadString(SBuffer* buf, size_t* len);
 size_t      tbufReadToString(SBuffer* buf, char* dst, size_t size);
+const char* tbufReadBinary(SBuffer* buf, size_t *len);
+size_t      tbufReadToBinary(SBuffer* buf, void* dst, size_t size);
 
 // basic write functions
-#define tbufBeginWrite(buf) ((buf)->allocator = realloc, (buf)->network = false, (buf)->data = NULL, ((buf)->pos = 0), ((buf)->size = 0), setjmp((buf)->jb))
+void  tbufBeginWrite(SBuffer* buf);
 void  tbufEnsureCapacity(SBuffer* buf, size_t size);
 char* tbufGetData(SBuffer* buf, bool takeOver);
 void  tbufWrite(SBuffer* buf, const void* data, size_t size);
 void  tbufWriteAt(SBuffer* buf, size_t pos, const void* data, size_t size);
 void  tbufWriteStringLen(SBuffer* buf, const char* str, size_t len);
 void  tbufWriteString(SBuffer* buf, const char* str);
+// the prototype of WriteBinary and Write is identical
+// the difference is: WriteBinary writes the length of the data to the buffer
+// first, then the actual data, which means the reader don't need to know data
+// size before read. Write only write the data itself, which means the reader
+// need to know data size before read.
+void  tbufWriteBinary(SBuffer* buf, const void* data, size_t len);
 
 // read / write functions for primitive types
 bool tbufReadBool(SBuffer* buf);
