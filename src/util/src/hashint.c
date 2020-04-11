@@ -107,11 +107,11 @@ void sdbDeleteIntHash(void *handle, void *pKey) {
   }
 }
 
-void *sdbGetIntHashData(void *handle, void *pKey) {
+void *sdbGetIntHashData(void *handle, const void *pKey) {
   int        hash;
   SLongHash *pNode;
   SHashObj * pObj;
-  uint32_t   key = *((uint32_t *)pKey);
+  uint32_t   key = *((const uint32_t *)pKey);
 
   pObj = (SHashObj *)handle;
   if (pObj == NULL || pObj->maxSessions == 0) return NULL;

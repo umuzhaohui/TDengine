@@ -20,7 +20,7 @@ void *sdbOpenIntHash(int maxSessions, int dataSize);
 void sdbCloseIntHash(void *handle);
 void *sdbAddIntHash(void *handle, void *key, void *pData);
 void sdbDeleteIntHash(void *handle, void *key);
-void *sdbGetIntHashData(void *handle, void *key);
+void *sdbGetIntHashData(void *handle, const void *key);
 void *sdbFetchIntHashData(void *handle, void *ptr, void **ppMeta);
 
 #endif

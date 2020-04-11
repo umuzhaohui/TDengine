@@ -102,7 +102,7 @@ static uint64_t   sdbVersion = 0;
 static void *(*sdbInitIndexFp[])(int32_t maxRows, int32_t dataSize) = {sdbOpenStrHash, sdbOpenIntHash};
 static void *(*sdbAddIndexFp[])(void *handle, void *key, void *data) = {sdbAddStrHash, sdbAddIntHash};
 static void (*sdbDeleteIndexFp[])(void *handle, void *key) = {sdbDeleteStrHash, sdbDeleteIntHash};
-static void *(*sdbGetIndexFp[])(void *handle, void *key) = {sdbGetStrHashData, sdbGetIntHashData};
+static void *(*sdbGetIndexFp[])(void *handle, const void *key) = {sdbGetStrHashData, sdbGetIntHashData};
 static void (*sdbCleanUpIndexFp[])(void *handle) = {sdbCloseStrHash, sdbCloseIntHash};
 static void *(*sdbFetchRowFp[])(void *handle, void *ptr, void **ppRow) = {sdbFetchStrHashData, sdbFetchIntHashData};
 
@@ -458,7 +458,7 @@ void sdbDecRef(void *handle, void *pRow) {
   }
 }
 
-void *sdbGetRow(void *handle, void *key) {
+void *sdbGetRow(void *handle, const void *key) {
   SSdbTable *pTable = (SSdbTable *)handle;
   SRowMeta * pMeta;
 

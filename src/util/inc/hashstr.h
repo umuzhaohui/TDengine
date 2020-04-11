@@ -20,7 +20,7 @@ void *sdbOpenStrHash(int maxSessions, int dataSize);
 void sdbCloseStrHash(void *handle);
 void *sdbAddStrHash(void *handle, void *key, void *pData);
 void sdbDeleteStrHash(void *handle, void *key);
-void *sdbGetStrHashData(void *handle, void *key);
+void *sdbGetStrHashData(void *handle, const void *key);
 void *sdbFetchStrHashData(void *handle, void *ptr, void **ppMeta);
 
 #endif

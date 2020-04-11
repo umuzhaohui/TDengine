@@ -32,10 +32,10 @@ typedef struct {
   int         dataSize;
 } SHashObj;
 
-int sdbHashString(void *handle, char *string) {
+int sdbHashString(void *handle, const char *string) {
   SHashObj *   pObj = (SHashObj *)handle;
   unsigned int hash = 0, hashv;
-  char *       c;
+  const char * c;
   int          len = strlen(string);
 
   c = string;
@@ -117,11 +117,11 @@ void sdbDeleteStrHash(void *handle, void *key) {
   }
 }
 
-void *sdbGetStrHashData(void *handle, void *key) {
+void *sdbGetStrHashData(void *handle, const void *key) {
   int        hash;
   SHashNode *pNode;
   SHashObj * pObj;
-  char *     string = (char *)key;
+  const char *string = (const char *)key;
 
   pObj = (SHashObj *)handle;
   if (pObj == NULL || pObj->maxSessions == 0) return NULL;

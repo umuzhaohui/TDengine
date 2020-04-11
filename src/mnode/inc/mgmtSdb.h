@@ -61,7 +61,7 @@ int32_t sdbInsertRow(SSdbOperDesc *pOper);
 int32_t sdbDeleteRow(SSdbOperDesc *pOper);
 int32_t sdbUpdateRow(SSdbOperDesc *pOper);
 
-void    *sdbGetRow(void *handle, void *key);
+void    *sdbGetRow(void *handle, const void *key);
 void    *sdbFetchRow(void *handle, void *pNode, void **ppRow);
 void     sdbIncRef(void *thandle, void *pRow);
 void     sdbDecRef(void *thandle, void *pRow);
