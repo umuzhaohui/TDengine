@@ -160,6 +160,13 @@ void taosArrayCopy(SArray* pDst, SArray* pSrc) {
   pDst->size = pSrc->size;
 }
 
+void taosArraySort(SArray* pArray, int (*compar)(const void*, const void*)) {
+  assert(pArray != NULL);
+  assert(compar != NULL);
+
+  qsort(pArray->pData, pArray->size, pArray->size, compar);
+}
+
 void taosArrayDestroy(SArray* pArray) {
   if (pArray == NULL) {
     return;

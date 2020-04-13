@@ -101,6 +101,13 @@ void taosArrayRemove(SArray* pArray, size_t index);
 void taosArrayCopy(SArray* pDst, SArray* pSrc);
 
 /**
+ * sort items in the array
+ * @param pArray
+ * @param compar
+ */
+void taosArraySort(SArray* pArray, int (*compar)(const void*, const void*));
+
+/**
  * destroy array list
  * @param pArray
  */
