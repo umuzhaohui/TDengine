@@ -52,8 +52,9 @@ void* taosArrayPush(SArray* pArray, void* pData);
 /**
  *
  * @param pArray
+ * @return
  */
-void taosArrayPop(SArray* pArray);
+void* taosArrayPop(SArray* pArray);
 
 /**
  * get the data from array
