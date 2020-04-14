@@ -165,7 +165,7 @@ void taosArraySort(SArray* pArray, int (*compar)(const void*, const void*)) {
   assert(pArray != NULL);
   assert(compar != NULL);
 
-  qsort(pArray->pData, pArray->size, pArray->size, compar);
+  qsort(pArray->pData, pArray->size, pArray->elemSize, compar);
 }
 
 void taosArrayDestroy(SArray* pArray) {

@@ -100,11 +100,11 @@ void   tbufSetup(SBuffer* buf, jmp_buf* jb, void* (*allocator)(void*, size_t), b
 void   tbufThrowError(SBuffer* buf, int32_t code);
 size_t tbufTell(SBuffer* buf);
 size_t tbufSeekTo(SBuffer* buf, size_t pos);
-size_t tbufSkip(SBuffer* buf, size_t size);
 void   tbufClose(SBuffer* buf, bool keepData);
 
 // basic read functions
 void        tbufBeginRead(SBuffer* buf, void* data, size_t len);
+size_t      tbufSkip(SBuffer* buf, size_t size);
 char*       tbufRead(SBuffer* buf, size_t size);
 void        tbufReadToBuffer(SBuffer* buf, void* dst, size_t size);
 const char* tbufReadString(SBuffer* buf, size_t* len);
@@ -113,19 +113,20 @@ const char* tbufReadBinary(SBuffer* buf, size_t *len);
 size_t      tbufReadToBinary(SBuffer* buf, void* dst, size_t size);
 
 // basic write functions
-void  tbufBeginWrite(SBuffer* buf);
-void  tbufEnsureCapacity(SBuffer* buf, size_t size);
-char* tbufGetData(SBuffer* buf, bool takeOver);
-void  tbufWrite(SBuffer* buf, const void* data, size_t size);
-void  tbufWriteAt(SBuffer* buf, size_t pos, const void* data, size_t size);
-void  tbufWriteStringLen(SBuffer* buf, const char* str, size_t len);
-void  tbufWriteString(SBuffer* buf, const char* str);
+void        tbufBeginWrite(SBuffer* buf);
+void        tbufEnsureCapacity(SBuffer* buf, size_t size);
+size_t      tbufReserve(SBuffer* buf, size_t size);
+char*       tbufGetData(SBuffer* buf, bool takeOver);
+void        tbufWrite(SBuffer* buf, const void* data, size_t size);
+void        tbufWriteAt(SBuffer* buf, size_t pos, const void* data, size_t size);
+void        tbufWriteStringLen(SBuffer* buf, const char* str, size_t len);
+void        tbufWriteString(SBuffer* buf, const char* str);
 // the prototype of WriteBinary and Write is identical
 // the difference is: WriteBinary writes the length of the data to the buffer
 // first, then the actual data, which means the reader don't need to know data
 // size before read. Write only write the data itself, which means the reader
 // need to know data size before read.
-void  tbufWriteBinary(SBuffer* buf, const void* data, size_t len);
+void        tbufWriteBinary(SBuffer* buf, const void* data, size_t len);
 
 // read / write functions for primitive types
 bool tbufReadBool(SBuffer* buf);

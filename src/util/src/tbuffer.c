@@ -58,10 +58,6 @@ size_t tbufSeekTo(SBuffer* buf, size_t pos) {
   return old;
 }
 
-size_t tbufSkip(SBuffer* buf, size_t size) {
-  return tbufSeekTo(buf, buf->pos + size);
-}
-
 void tbufClose(SBuffer* buf, bool keepData) {
   if (!keepData) {
     (*buf->allocator)(buf->data, 0);
@@ -78,6 +74,10 @@ void tbufBeginRead(SBuffer* buf, void* data, size_t len) {
   buf->data = data;
   buf->pos = 0;
   buf->size = (data == NULL) ? 0 : len;
+}
+
+size_t tbufSkip(SBuffer* buf, size_t size) {
+  return tbufSeekTo(buf, buf->pos + size);
 }
 
 char* tbufRead(SBuffer* buf, size_t size) {
@@ -165,6 +165,11 @@ void tbufEnsureCapacity(SBuffer* buf, size_t size) {
     buf->data = data;
     buf->size = nsize;
   }
+}
+
+size_t tbufReserve(SBuffer* buf, size_t size) {
+  tbufEnsureCapacity(buf, size);
+  return tbufSeekTo(buf, buf->pos + size);
 }
 
 char* tbufGetData(SBuffer* buf, bool takeOver) {
