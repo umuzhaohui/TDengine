@@ -306,8 +306,8 @@ void rpcClose(void *param) {
   tfree(pRpc);
 }
 
-void *rpcMallocCont(int contLen) {
-  int size = contLen + RPC_MSG_OVERHEAD;
+void *rpcMallocCont(size_t contLen) {
+  size_t size = contLen + RPC_MSG_OVERHEAD;
 
   char *start = (char *)calloc(1, (size_t)size);
   if (start == NULL) {
@@ -325,7 +325,7 @@ void rpcFreeCont(void *cont) {
   }
 }
 
-void *rpcReallocCont(void *ptr, int contLen) {
+void *rpcReallocCont(void *ptr, size_t contLen) {
   if (ptr == NULL) return rpcMallocCont(contLen);
 
   char *start = ((char *)ptr) - sizeof(SRpcReqContext) - sizeof(SRpcHead);
@@ -334,7 +334,7 @@ void *rpcReallocCont(void *ptr, int contLen) {
     return NULL;
   }
 
-  int size = contLen + RPC_MSG_OVERHEAD;
+  size_t size = contLen + RPC_MSG_OVERHEAD;
   start = realloc(start, size);
   if (start == NULL) {
     tError("failed to realloc cont, size:%d", size);

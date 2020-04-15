@@ -27,7 +27,7 @@ extern "C" {
 
 int32_t     mgmtInitTables();
 void        mgmtCleanUpTables();
-STableObj*  mgmtGetTable(char* tableId);
+STableObj*  mgmtGetTable(const char* tableId);
 void        mgmtIncTableRef(void *pTable); 
 void        mgmtDecTableRef(void *pTable);
 void        mgmtDropAllChildTables(SDbObj *pDropDb);

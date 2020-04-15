@@ -615,10 +615,6 @@ typedef struct {
   char    tableIds[];
 } SCMMultiTableInfoMsg;
 
-typedef struct SCMSTableVgroupMsg {
-  char tableId[TSDB_TABLE_ID_LEN];
-} SCMSTableVgroupMsg;
-
 typedef struct {
   int32_t  numOfDnodes;
   uint32_t dnodeIps[];

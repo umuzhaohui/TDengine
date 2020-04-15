@@ -49,8 +49,8 @@ void *  tsChildTableSdb;
 void *  tsSuperTableSdb;
 static int32_t tsChildTableUpdateSize;
 static int32_t tsSuperTableUpdateSize;
-static void *  mgmtGetChildTable(char *tableId);
-static void *  mgmtGetSuperTable(char *tableId);
+static void *  mgmtGetChildTable(const char *tableId);
+static void *  mgmtGetSuperTable(const char *tableId);
 static void    mgmtDropAllChildTablesInStable(SSuperTableObj *pStable);
 static int32_t mgmtGetShowTableMeta(STableMetaMsg *pMeta, SShowObj *pShow, void *pConn);
 static int32_t mgmtRetrieveShowTables(SShowObj *pShow, char *data, int32_t rows, void *pConn);
@@ -478,15 +478,15 @@ int32_t mgmtInitTables() {
   return TSDB_CODE_SUCCESS;
 }
 
-static void *mgmtGetChildTable(char *tableId) {
+static void *mgmtGetChildTable(const char *tableId) {
   return sdbGetRow(tsChildTableSdb, tableId);
 }
 
-static void *mgmtGetSuperTable(char *tableId) {
+static void *mgmtGetSuperTable(const char *tableId) {
   return sdbGetRow(tsSuperTableSdb, tableId);
 }
 
-STableObj *mgmtGetTable(char *tableId) {
+STableObj *mgmtGetTable(const char *tableId) {
   STableObj *tableInfo = sdbGetRow(tsSuperTableSdb, tableId);
   if (tableInfo != NULL) {
     return tableInfo;
@@ -1098,28 +1098,107 @@ static void mgmtGetSuperTableMeta(SQueuedMsg *pMsg) {
   mTrace("stable:%%s, uid:%" PRIu64 " table meta is retrieved", pTable->info.tableId, pTable->uid);
 }
 
-static void mgmtProcessSuperTableVgroupMsg(SQueuedMsg *pMsg) {
-  SCMSTableVgroupMsg *pInfo = pMsg->pCont;
-  pMsg->pTable = mgmtGetSuperTable(pInfo->tableId);
-  if (pMsg->pTable == NULL) {
-    mgmtSendSimpleResp(pMsg->thandle, TSDB_CODE_INVALID_TABLE);
+int cmpChildTableByVgid(const void* x, const void* y) {
+  const SChildTableObj* a = *(const SChildTableObj**)x;
+  const SChildTableObj* b = *(const SChildTableObj**)y;
+  if (a->vgId > b->vgId) return 1;
+  if (a->vgId < b->vgId) return -1;
+  return 0;
+}
+
+static void mgmtProcessSuperTableVgroupMsg( SQueuedMsg *pMsg ) {
+  jmp_buf jb;
+  SBuffer rbuf, wbuf;
+  SArray* arr = NULL;
+  tbufSetup( &rbuf, &jb, NULL, true );
+  tbufSetup( &wbuf, &jb, rpcReallocCont, true );
+
+  int32_t code = setjmp( jb );
+  if( code != 0 ) {
+    // TODO: dec refCount of tables
+    taosArrayDestroy(arr);
+    tbufClose( &wbuf, false );
+    mgmtSendSimpleResp( pMsg->thandle, code );
     return;
   }
 
-  SCMSTableVgroupRspMsg *pRsp = rpcMallocCont(sizeof(SCMSTableVgroupRspMsg) + sizeof(uint32_t) * mgmtGetDnodesNum());
-  if (pRsp == NULL) {
-    mgmtSendSimpleResp(pMsg->thandle, TSDB_CODE_INVALID_TABLE);
-    return;
-  } 
+  tbufBeginRead( &rbuf, pMsg->pCont, pMsg->contLen );
 
-  pRsp->numOfDnodes = htonl(1);
-  pRsp->dnodeIps[0] = htonl(inet_addr(tsPrivateIp));
+  const char* tableId = tbufReadString( &rbuf, NULL );
+  pMsg->pTable = mgmtGetSuperTable( tableId );
+  if( pMsg->pTable == NULL ) {
+    tbufThrowError( &rbuf, TSDB_CODE_INVALID_TABLE );
+  }
+
+  arr = taosArrayInit(0, sizeof(SChildTableObj*));
+
+  const char* tbNameRel = tbufReadString( &rbuf, NULL );
+  if( strcmp(tbNameRel, QUERY_COND_REL_PREFIX_IN) == 0 ) {
+    uint8_t count = tbufReadUint8( &rbuf );
+    for( uint8_t i = 0; i < count; ++i ) {
+      const char* id = tbufReadString( &rbuf, NULL );
+      SChildTableObj* table = (SChildTableObj*)mgmtGetChildTable( id );
+      if (table == NULL) {
+        continue;
+      }
+      taosArrayPush(arr, &table);
+    }
+  } if( strcmp(tbNameRel, QUERY_COND_REL_PREFIX_LIKE) == 0 ) {
+    // TODO:
+  } else {
+    // TODO:
+  }
   
-  int32_t msgLen = sizeof(SSuperTableObj) + htonl(pRsp->numOfDnodes) * sizeof(int32_t);
+  tbufBeginWrite( &wbuf );
+  tbufWriteUint32( &wbuf, 1 ); // number of dnodes
+
+  taosArraySort(arr, cmpChildTableByVgid);
+
+  int32_t curVgId = -1;
+  uint32_t numOfVgroup = 0, numOfTable = 0;
+  // reserve space for numOfVgroup
+  size_t posNumOfVgroup = tbufReserve( &wbuf, sizeof(numOfVgroup) );
+  size_t posNumOfTable = 0;
+
+  while( true ) {
+    void* p = taosArrayPop( arr );
+    if( p == NULL) break;
+    SChildTableObj* table = *((SChildTableObj**)p);
+    if (table->vgId != curVgId) {
+      if (numOfTable > 0) {
+        tbufWriteUint32At( &wbuf, posNumOfTable, numOfTable );
+        numOfTable = 0;
+      }
+      numOfVgroup++;
+      curVgId = table->vgId;
+      tbufWriteInt32( &wbuf, curVgId );                 // vgroup id
+      tbufWriteUint32( &wbuf, inet_addr(tsPrivateIp) ); // ip address
+      tbufWriteUint16( &wbuf, 0 );                      // port
+
+      // reserve space for table count
+      posNumOfTable = tbufReserve( &wbuf, sizeof(numOfTable) );
+    }
+
+    tbufWriteInt32( &wbuf, table->sid );
+    tbufWriteInt64( &wbuf, table->uid );
+    tbufWriteString( &wbuf, table->info.tableId );
+    numOfTable++;
+    mgmtDecTableRef( table );
+  }
+
+  if (numOfTable > 0) {
+    tbufWriteUint32At( &wbuf, posNumOfTable, numOfTable );
+    numOfTable = 0;
+  }
+  tbufWriteUint32At( &wbuf, posNumOfVgroup, numOfVgroup );
+
+  taosArrayDestroy(arr);
+  arr = NULL;
+
   SRpcMsg rpcRsp = {0};
   rpcRsp.handle = pMsg->thandle;
-  rpcRsp.pCont = pRsp;
-  rpcRsp.contLen = msgLen;
+  rpcRsp.contLen = tbufTell(&wbuf);
+  rpcRsp.pCont = tbufGetData(&wbuf, true);
   rpcSendResponse(&rpcRsp);
 }
 

@@ -21,6 +21,7 @@ extern "C" {
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <stddef.h>
 #include "taosdef.h"
 
 #define TAOS_CONN_SERVER   0
@@ -78,9 +79,9 @@ typedef struct {
 
 void *rpcOpen(SRpcInit *pRpc);
 void  rpcClose(void *);
-void *rpcMallocCont(int contLen);
+void *rpcMallocCont(size_t contLen);
 void  rpcFreeCont(void *pCont);
-void *rpcReallocCont(void *ptr, int contLen);
+void *rpcReallocCont(void *ptr, size_t contLen);
 void  rpcSendRequest(void *thandle, SRpcIpSet *pIpSet, SRpcMsg *pMsg);
 void  rpcSendResponse(SRpcMsg *pMsg);
 void  rpcSendRedirectRsp(void *pConn, SRpcIpSet *pIpSet); 

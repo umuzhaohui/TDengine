@@ -26,6 +26,7 @@
 #include "ttime.h"
 #include "ttimer.h"
 #include "tutil.h"
+#include "tbuffer.h"
 
 #define TSC_MGMT_VNODE 999
 
@@ -868,16 +869,6 @@ int tscBuildQueryMsg(SSqlObj *pSql, SSqlInfo *pInfo) {
     }
   }
   
-  // tbname in/like query expression should be sent to mgmt node
-  STagCond* pTagCond = &pQueryInfo->tagCond;
-  if (pTagCond->tbnameCond.cond != NULL) {
-    size_t s = strlen(pTagCond->tbnameCond.cond);
-    memcpy(pMsg, pTagCond->tbnameCond.cond, s);
-  
-    pQueryMsg->nameCondLen = htons(s);
-    pMsg += s;
-  }
-  
   msgLen = pMsg - pStart;
 
   tscTrace("%p msg built success,len:%d bytes", pSql, msgLen);
@@ -1595,161 +1586,66 @@ static UNUSED_FUNC int32_t tscEstimateMetricMetaMsgSize(SSqlCmd *pCmd) {
 }
 
 int tscBuildSTableVgroupMsg(SSqlObj *pSql, SSqlInfo *pInfo) {
-
-#if 0
-  SSuperTableMetaMsg *pMetaMsg;
-  char *          pMsg, *pStart;
-  int             msgLen = 0;
-  int             tableIndex = 0;
-
   SSqlCmd *   pCmd = &pSql->cmd;
-  SQueryInfo *pQueryInfo = tscGetQueryInfoDetail(&pSql->cmd, 0);
-
-  STagCond *pTagCond = &pQueryInfo->tagCond;
-
-  STableMetaInfo *pTableMetaInfo = tscGetMetaInfo(pQueryInfo, tableIndex);
-
-  int32_t size = tscEstimateMetricMetaMsgSize(pCmd);
-  if (TSDB_CODE_SUCCESS != tscAllocPayload(pCmd, size)) {
-    tscError("%p failed to malloc for metric meter msg", pSql);
-    return -1;
-  }
-
-  pStart = pCmd->payload + tsRpcHeadSize;
-  pMsg = pStart;
-
-  SMgmtHead *pMgmt = (SMgmtHead *)pMsg;
-  tscGetDBInfoFromMeterId(pTableMetaInfo->name, pMgmt->db);
-
-  pMsg += sizeof(SMgmtHead);
-
-  pMetaMsg = (SSuperTableMetaMsg *)pMsg;
-  pMetaMsg->numOfTables = htonl(pQueryInfo->numOfTables);
-
-  pMsg += sizeof(SSuperTableMetaMsg);
-
-  int32_t offset = pMsg - (char *)pMetaMsg;
-  pMetaMsg->join = htonl(offset);
-
-  // todo refactor
-  pMetaMsg->joinCondLen = htonl((TSDB_TABLE_ID_LEN + sizeof(int16_t)) * 2);
-
-  memcpy(pMsg, pTagCond->joinInfo.left.tableId, TSDB_TABLE_ID_LEN);
-  pMsg += TSDB_TABLE_ID_LEN;
-
-  *(int16_t *)pMsg = pTagCond->joinInfo.left.tagCol;
-  pMsg += sizeof(int16_t);
-
-  memcpy(pMsg, pTagCond->joinInfo.right.tableId, TSDB_TABLE_ID_LEN);
-  pMsg += TSDB_TABLE_ID_LEN;
-
-  *(int16_t *)pMsg = pTagCond->joinInfo.right.tagCol;
-  pMsg += sizeof(int16_t);
-
-  for (int32_t i = 0; i < pQueryInfo->numOfTables; ++i) {
-    pTableMetaInfo = tscGetTableMetaInfoFromCmd(pCmd, pCmd->clauseIndex, i);
-    uint64_t uid = pTableMetaInfo->pTableMeta->uid;
-
-    offset = pMsg - (char *)pMetaMsg;
-    pMetaMsg->metaElem[i] = htonl(offset);
-
-    SSuperTableMetaElemMsg *pElem = (SSuperTableMetaElemMsg *)pMsg;
-    pMsg += sizeof(SSuperTableMetaElemMsg);
-
-    // convert to unicode before sending to mnode for metric query
-    int32_t condLen = 0;
-    if (pTagCond->numOfTagCond > 0) {
-      SCond *pCond = tsGetSTableQueryCondPos(pTagCond, uid);
-      if (pCond != NULL && pCond->cond != NULL) {
-        condLen = strlen(pCond->cond) + 1;
-
-        bool ret = taosMbsToUcs4(pCond->cond, condLen, pMsg, condLen * TSDB_NCHAR_SIZE);
-        if (!ret) {
-          tscError("%p mbs to ucs4 failed:%s", pSql, tsGetSTableQueryCondPos(pTagCond, uid));
-          return 0;
-        }
-      }
-    }
-
-    pElem->condLen = htonl(condLen);
-
-    offset = pMsg - (char *)pMetaMsg;
-    pElem->cond = htonl(offset);
-    pMsg += condLen * TSDB_NCHAR_SIZE;
-
-    pElem->rel = htons(pTagCond->relType);
-    if (pTagCond->tbnameCond.uid == uid) {
-      offset = pMsg - (char *)pMetaMsg;
-
-      pElem->tableCond = htonl(offset);
-      
-      uint32_t len = 0;
-      if (pTagCond->tbnameCond.cond != NULL) {
-        len = strlen(pTagCond->tbnameCond.cond);
-        memcpy(pMsg, pTagCond->tbnameCond.cond, len);
-      }
-      
-      pElem->tableCondLen = htonl(len);
-      pMsg += len;
-    }
-
-    SSqlGroupbyExpr *pGroupby = &pQueryInfo->groupbyExpr;
-
-    if (pGroupby->tableIndex != i && pGroupby->numOfGroupCols > 0) {
-      pElem->orderType = 0;
-      pElem->orderIndex = 0;
-      pElem->numOfGroupCols = 0;
-    } else {
-      pElem->numOfGroupCols = htons(pGroupby->numOfGroupCols);
-      for (int32_t j = 0; j < pTableMetaInfo->numOfTags; ++j) {
-        pElem->tagCols[j] = htons(pTableMetaInfo->tagColumnIndex[j]);
-      }
-
-      if (pGroupby->numOfGroupCols != 0) {
-        pElem->orderIndex = htons(pGroupby->orderIndex);
-        pElem->orderType = htons(pGroupby->orderType);
-        offset = pMsg - (char *)pMetaMsg;
-
-        pElem->groupbyTagColumnList = htonl(offset);
-        for (int32_t j = 0; j < pQueryInfo->groupbyExpr.numOfGroupCols; ++j) {
-          SColIndexEx *pCol = &pQueryInfo->groupbyExpr.columnInfo[j];
-          SColIndexEx *pDestCol = (SColIndexEx *)pMsg;
-
-          pDestCol->colIdxInBuf = 0;
-          pDestCol->colIdx = htons(pCol->colIdx);
-          pDestCol->colId = htons(pDestCol->colId);
-          pDestCol->flag = htons(pDestCol->flag);
-          strncpy(pDestCol->name, pCol->name, tListLen(pCol->name));
-
-          pMsg += sizeof(SColIndexEx);
-        }
-      }
-    }
-
-    strcpy(pElem->tableId, pTableMetaInfo->name);
-    pElem->numOfTags = htons(pTableMetaInfo->numOfTags);
-
-    int16_t len = pMsg - (char *)pElem;
-    pElem->elemLen = htons(len);  // redundant data for integrate check
-  }
-
-  msgLen = pMsg - pStart;
-  pCmd->payloadLen = msgLen;
-  pCmd->msgType = TSDB_MSG_TYPE_CM_STABLE_VGROUP;
-  assert(msgLen + minMsgSize() <= size);
-#endif
   
-  SSqlCmd *pCmd = &pSql->cmd;
+  SQueryInfo *pQueryInfo = tscGetQueryInfoDetail(&pSql->cmd, 0);
+  STagCond *pTagCond = &pQueryInfo->tagCond;
 
   STableMetaInfo *pTableMetaInfo = tscGetTableMetaInfoFromCmd(pCmd, pCmd->clauseIndex, 0);
 
-  SCMSTableVgroupMsg *pStableVgroupMsg = (SCMSTableVgroupMsg *) pCmd->payload;
-  strncpy(pStableVgroupMsg->tableId, pTableMetaInfo->name, tListLen(pStableVgroupMsg->tableId));
+  jmp_buf jb;
+  SBuffer buf;
+  tbufSetup( &buf, &jb, NULL, true );
 
+  int32_t code = setjmp( jb );
+  if (code != 0) {
+    tbufClose(&buf, false);
+    return code;
+  }
+
+  tbufBeginWrite(&buf);
+  tbufWriteString(&buf, pTableMetaInfo->name);
+
+  char* cond = pTagCond->tbnameCond.cond;
+
+  if (cond == NULL) {
+    tbufWriteString(&buf, "");
+
+  } else if (strncmp(cond, QUERY_COND_REL_PREFIX_IN, QUERY_COND_REL_PREFIX_IN_LEN) == 0) {
+    cond += QUERY_COND_REL_PREFIX_IN_LEN;
+    tbufWriteString(&buf, QUERY_COND_REL_PREFIX_IN);
+
+    uint8_t count = 0;
+    size_t pos = tbufSkip(&buf, sizeof(count));
+
+    for (char *e = cond; *e != 0; e++) {
+      if (*e == ',') {
+        tbufWriteStringLen(&buf, cond, e - cond);
+        cond = e + 1;
+        count++;
+      }
+    }
+    tbufWriteString(&buf, cond);
+    count++;
+
+    tbufWriteUint8At(&buf, pos, count);
+
+  } else if (strncmp(cond, QUERY_COND_REL_PREFIX_LIKE, QUERY_COND_REL_PREFIX_LIKE_LEN) == 0) {
+    cond += QUERY_COND_REL_PREFIX_LIKE_LEN;
+    tbufWriteString(&buf, QUERY_COND_REL_PREFIX_LIKE);
+    tbufWriteString(&buf, cond);
+
+  } else {
+    tbufWriteString(&buf, "");
+
+  }
+  
+  pCmd->payloadLen = (int)tbufTell(&buf);
+  pCmd->payload = tbufGetData(&buf, true);
   pCmd->msgType = TSDB_MSG_TYPE_CM_STABLE_VGROUP;
-  pCmd->payloadLen = sizeof(SCMSTableVgroupMsg);
 
-  return TSDB_CODE_SUCCESS;
+  tbufClose(&buf, true);
+  return TSDB_CODE_SUCCESS; 
 }
 
 int tscEstimateHeartBeatMsgLength(SSqlObj *pSql) {
@@ -1992,130 +1888,56 @@ int tscProcessMultiMeterMetaRsp(SSqlObj *pSql) {
 }
 
 int tscProcessSTableVgroupRsp(SSqlObj *pSql) {
-#if 0
-  void **      metricMetaList = NULL;
-  int32_t *    sizes = NULL;
-  
-  int32_t num = htons(*(int16_t *)rsp);
-  rsp += sizeof(int16_t);
+  STableMetaDnode* dnodes = NULL;
+  SBuffer buf;
+  jmp_buf jb;
+  tbufSetup( &buf, &jb, NULL, true );
 
-  metricMetaList = calloc(1, POINTER_BYTES * num);
-  sizes = calloc(1, sizeof(int32_t) * num);
-
-  // return with error code
-  if (metricMetaList == NULL || sizes == NULL) {
-    tfree(metricMetaList);
-    tfree(sizes);
-    pSql->res.code = TSDB_CODE_CLI_OUT_OF_MEMORY;
-
-    return pSql->res.code;
+  int32_t code = setjmp( jb );
+  if( code != 0 ) {
+    if (dnodes != NULL) {
+      // TODO: free it
+    }
+    return code;
   }
 
-  for (int32_t k = 0; k < num; ++k) {
-    pMeta = (SSuperTableMeta *)rsp;
+  tbufBeginRead( &buf, pSql->res.pRsp, pSql->res.rspLen );
+  uint32_t numOfDnodes = tbufReadUint32( &buf );
+  dnodes = malloc( sizeof(STableMetaDnode) * numOfDnodes );
+  if( dnodes == NULL ) {
+    longjmp( jb, TSDB_CODE_CLI_OUT_OF_MEMORY );
+  }
 
-    size_t size = (size_t)pSql->res.rspLen - 1;
-    rsp = rsp + sizeof(SSuperTableMeta);
+  for( uint32_t i = 0; i < numOfDnodes; i++ ) {
+    uint32_t numOfVgroups = tbufReadUint32( &buf );
+    STableMetaDnode *dnode = dnodes + i;
+    dnode->numOfVgroups = numOfVgroups;
+    dnodes->vgroups = malloc( sizeof(STableMetaVgroup) * numOfVgroups );
 
-    pMeta->numOfTables = htonl(pMeta->numOfTables);
-    pMeta->numOfVnodes = htonl(pMeta->numOfVnodes);
-    pMeta->tagLen = htons(pMeta->tagLen);
+    for( uint32_t j = 0; j < numOfVgroups; j++ ) {
+      STableMetaVgroup* vgroup = dnodes->vgroups + j;
+      vgroup->vgId = tbufReadInt32( &buf );
+      vgroup->ip = tbufReadUint32( &buf );
+      vgroup->port = tbufReadUint16( &buf );
+      uint32_t numOfTables = tbufReadUint32( &buf );
+      vgroup->numOfTables = numOfTables;
+      vgroup->tables = malloc( sizeof(STableMetaChildTable) * numOfTables );
 
-    size += pMeta->numOfVnodes * sizeof(SVnodeSidList *) + pMeta->numOfTables * sizeof(STableIdInfo *);
-
-    char *pBuf = calloc(1, size);
-    if (pBuf == NULL) {
-      pSql->res.code = TSDB_CODE_CLI_OUT_OF_MEMORY;
-      goto _error_clean;
-    }
-
-    SSuperTableMeta *pNewMetricMeta = (SSuperTableMeta *)pBuf;
-    metricMetaList[k] = pNewMetricMeta;
-
-    pNewMetricMeta->numOfTables = pMeta->numOfTables;
-    pNewMetricMeta->numOfVnodes = pMeta->numOfVnodes;
-    pNewMetricMeta->tagLen = pMeta->tagLen;
-
-    pBuf = pBuf + sizeof(SSuperTableMeta) + pNewMetricMeta->numOfVnodes * sizeof(SVnodeSidList *);
-
-    for (int32_t i = 0; i < pMeta->numOfVnodes; ++i) {
-      SVnodeSidList *pSidLists = (SVnodeSidList *)rsp;
-      memcpy(pBuf, pSidLists, sizeof(SVnodeSidList));
-
-      pNewMetricMeta->list[i] = pBuf - (char *)pNewMetricMeta;  // offset value
-      SVnodeSidList *pLists = (SVnodeSidList *)pBuf;
-
-      tscTrace("%p metricmeta:vid:%d,numOfTables:%d", pSql, i, pLists->numOfSids);
-
-      pBuf += sizeof(SVnodeSidList) + sizeof(STableIdInfo *) * pSidLists->numOfSids;
-      rsp += sizeof(SVnodeSidList);
-
-      size_t elemSize = sizeof(STableIdInfo) + pNewMetricMeta->tagLen;
-      for (int32_t j = 0; j < pSidLists->numOfSids; ++j) {
-        pLists->pSidExtInfoList[j] = pBuf - (char *)pLists;
-        memcpy(pBuf, rsp, elemSize);
-
-        ((STableIdInfo *)pBuf)->uid = htobe64(((STableIdInfo *)pBuf)->uid);
-        ((STableIdInfo *)pBuf)->sid = htonl(((STableIdInfo *)pBuf)->sid);
-
-        rsp += elemSize;
-        pBuf += elemSize;
+      for( uint32_t k = 0; k < numOfTables; k++ ) {
+        STableMetaChildTable* table = vgroup->tables + k;
+        table->sid = tbufReadInt32( &buf );
+        table->uid = tbufReadInt64( &buf );
+        tbufReadToString( &buf, table->tbname, tListLen(table->tbname) );
       }
     }
-
-    sizes[k] = pBuf - (char *)pNewMetricMeta;
   }
 
-  SQueryInfo *pQueryInfo = tscGetQueryInfoDetail(&pSql->cmd, 0);
-  for (int32_t i = 0; i < num; ++i) {
-    char name[TSDB_MAX_TAGS_LEN + 1] = {0};
-
-    STableMetaInfo *pTableMetaInfo = tscGetMetaInfo(pQueryInfo, i);
-    tscGetMetricMetaCacheKey(pQueryInfo, name, pTableMetaInfo->pTableMeta->uid);
-
-#ifdef _DEBUG_VIEW
-    printf("generate the metric key:%s, index:%d\n", name, i);
-#endif
-
-    // release the used metricmeta
-    taosCacheRelease(tscCacheHandle, (void **)&(pTableMetaInfo->pMetricMeta), false);
-    pTableMetaInfo->pMetricMeta = (SSuperTableMeta *)taosCachePut(tscCacheHandle, name, (char *)metricMetaList[i],
-                                                                      sizes[i], tsMetricMetaKeepTimer);
-    tfree(metricMetaList[i]);
-
-    // failed to put into cache
-    if (pTableMetaInfo->pMetricMeta == NULL) {
-      pSql->res.code = TSDB_CODE_CLI_OUT_OF_MEMORY;
-      goto _error_clean;
-    }
-  }
-
-_error_clean:
-  // free allocated resource
-  for (int32_t i = 0; i < num; ++i) {
-    tfree(metricMetaList[i]);
-  }
-
-  free(sizes);
-  free(metricMetaList);
-#endif
-  
-  SCMSTableVgroupRspMsg *pStableVgroup = (SCMSTableVgroupRspMsg *)pSql->res.pRsp;
-  pStableVgroup->numOfDnodes = htonl(pStableVgroup->numOfDnodes);
-  
-  SSqlObj* pparent = pSql->param;
-  assert(pparent != NULL);
-  
-  SSqlCmd* pCmd = &pparent->cmd;
+  SSqlCmd* pCmd = &pSql->cmd;
   STableMetaInfo* pInfo = tscGetTableMetaInfoFromCmd(pCmd, pCmd->clauseIndex, 0);
-  pInfo->vgroupIdList = taosArrayInit(pStableVgroup->numOfDnodes, sizeof(int32_t));
-  
-  // todo opt performance
-  for(int32_t i = 0; i < pStableVgroup->numOfDnodes; ++i) {
-    taosArrayPush(pInfo->vgroupIdList, &pStableVgroup->dnodeIps[i]);
-  }
-  
-  return pSql->res.code;
+  pInfo->numOfDnodes = numOfDnodes;
+  pInfo->dnodes = dnodes;
+
+  return 0;
 }
 
 /*

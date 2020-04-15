@@ -68,10 +68,53 @@ typedef struct STableMeta {
   SSchema    schema[]; // if the table is TSDB_CHILD_TABLE, schema is acquired by super table meta info
 } STableMeta;
 
+
+typedef struct STableMetaChildTable {
+  int32_t sid;
+  uint64_t uid;
+  char tbname[TSDB_TABLE_ID_LEN];
+} STableMetaChildTable;
+
+typedef struct STableMetaVgroup {
+  int32_t vgId;
+  uint32_t ip;
+  uint16_t port;
+  uint32_t numOfTables;
+  STableMetaChildTable* tables;
+} STableMetaVgroup;
+
+typedef struct STableMetaDnode {
+  uint32_t numOfVgroups;
+  STableMetaVgroup* vgroups;
+} STableMetaDnode;
+
 typedef struct STableMetaInfo {
   STableMeta * pTableMeta;       // table meta, cached in client side and acquried by name
+
 //  SSuperTableMeta *pMetricMeta;  // metricmeta
   SArray* vgroupIdList;
+  // TODO: remove comments
+/* my own struct */
+/*
+{
+  numOfDnodes,
+  [
+    numOfVgroups,
+    [
+      vgId,
+      SIpAddr,
+      numOfTable,
+      [
+        Sid,
+        Uid,
+        tbName
+      ]
+    ]
+  ]
+}
+*/
+  uint32_t numOfDnodes;
+  STableMetaDnode* dnodes;
   
   /*
    * 1. keep the vnode index during the multi-vnode super table projection query

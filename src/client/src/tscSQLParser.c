@@ -5693,13 +5693,6 @@ int32_t doCheckForQuery(SSqlObj* pSql, SQuerySQL* pQuerySql, int32_t index) {
 
   assert(pQueryInfo->numOfTables == pQuerySql->from->nExpr);
   
-  if (UTIL_TABLE_IS_SUPERTABLE(pTableMetaInfo)) {
-   int32_t code = tscGetSTableVgroupInfo(pSql, index);
-   if (code != TSDB_CODE_SUCCESS) {
-     return code;
-   }
-  }
-
   // parse the group by clause in the first place
   if (parseGroupbyClause(pQueryInfo, pQuerySql->pGroupby, pCmd) != TSDB_CODE_SUCCESS) {
     return TSDB_CODE_INVALID_SQL;
@@ -5741,6 +5734,13 @@ int32_t doCheckForQuery(SSqlObj* pSql, SQuerySQL* pQuerySql, int32_t index) {
   } else {  // set the time rang
     pQueryInfo->stime = 0;
     pQueryInfo->etime = INT64_MAX;
+  }
+
+  if (isSTable) {
+   int32_t code = tscGetSTableVgroupInfo(pSql, index);
+   if (code != TSDB_CODE_SUCCESS) {
+     return code;
+   }
   }
 
   // user does not specified the query time window, twa is not allowed in such case.
