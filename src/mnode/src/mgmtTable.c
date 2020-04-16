@@ -1115,8 +1115,11 @@ static void mgmtProcessSuperTableVgroupMsg( SQueuedMsg *pMsg ) {
 
   int32_t code = setjmp( jb );
   if( code != 0 ) {
-    // TODO: dec refCount of tables
-    taosArrayDestroy(arr);
+    for( size_t i = 0; i < taosArrayGetSize(arr); i++ ) {
+      SChildTableObj* table = *(SChildTableObj**)taosArrayGet( arr, i );
+      mgmtDecTableRef( table );
+    }
+    taosArrayDestroy( arr );
     tbufClose( &wbuf, false );
     mgmtSendSimpleResp( pMsg->thandle, code );
     return;
@@ -1141,7 +1144,7 @@ static void mgmtProcessSuperTableVgroupMsg( SQueuedMsg *pMsg ) {
       if (table == NULL) {
         continue;
       }
-      taosArrayPush(arr, &table);
+      taosArrayPush( arr, &table );
     }
   } if( strcmp(tbNameRel, QUERY_COND_REL_PREFIX_LIKE) == 0 ) {
     // TODO:
@@ -1152,7 +1155,7 @@ static void mgmtProcessSuperTableVgroupMsg( SQueuedMsg *pMsg ) {
   tbufBeginWrite( &wbuf );
   tbufWriteUint32( &wbuf, 1 ); // number of dnodes
 
-  taosArraySort(arr, cmpChildTableByVgid);
+  taosArraySort( arr, cmpChildTableByVgid );
 
   int32_t curVgId = -1;
   uint32_t numOfVgroup = 0, numOfTable = 0;
@@ -1160,12 +1163,11 @@ static void mgmtProcessSuperTableVgroupMsg( SQueuedMsg *pMsg ) {
   size_t posNumOfVgroup = tbufReserve( &wbuf, sizeof(numOfVgroup) );
   size_t posNumOfTable = 0;
 
-  while( true ) {
-    void* p = taosArrayPop( arr );
-    if( p == NULL) break;
-    SChildTableObj* table = *((SChildTableObj**)p);
-    if (table->vgId != curVgId) {
-      if (numOfTable > 0) {
+  for( size_t i = 0; i < taosArrayGetSize(arr); i++ ) {
+    SChildTableObj* table = *(SChildTableObj**)taosArrayGet( arr, i );
+
+    if( table->vgId != curVgId ) { // found a new vgroup
+      if( numOfTable > 0 ) {       // update table count of previous vgroup
         tbufWriteUint32At( &wbuf, posNumOfTable, numOfTable );
         numOfTable = 0;
       }
@@ -1183,23 +1185,26 @@ static void mgmtProcessSuperTableVgroupMsg( SQueuedMsg *pMsg ) {
     tbufWriteInt64( &wbuf, table->uid );
     tbufWriteString( &wbuf, table->info.tableId );
     numOfTable++;
-    mgmtDecTableRef( table );
   }
 
-  if (numOfTable > 0) {
+  for( size_t i = 0; i < taosArrayGetSize(arr); i++ ) {
+    SChildTableObj* table = *(SChildTableObj**)taosArrayGet( arr, i );
+    mgmtDecTableRef( table );
+  }
+  taosArrayDestroy( arr );
+  arr = NULL;
+
+  if( numOfTable > 0 ) {
     tbufWriteUint32At( &wbuf, posNumOfTable, numOfTable );
     numOfTable = 0;
   }
   tbufWriteUint32At( &wbuf, posNumOfVgroup, numOfVgroup );
 
-  taosArrayDestroy(arr);
-  arr = NULL;
-
-  SRpcMsg rpcRsp = {0};
+  SRpcMsg rpcRsp = { 0 };
   rpcRsp.handle = pMsg->thandle;
-  rpcRsp.contLen = tbufTell(&wbuf);
-  rpcRsp.pCont = tbufGetData(&wbuf, true);
-  rpcSendResponse(&rpcRsp);
+  rpcRsp.contLen = tbufTell( &wbuf );
+  rpcRsp.pCont = tbufGetData( &wbuf, true );
+  rpcSendResponse( &rpcRsp );
 }
 
 static void mgmtProcessDropSuperTableRsp(SRpcMsg *rpcMsg) {

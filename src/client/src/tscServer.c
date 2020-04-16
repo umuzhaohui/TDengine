@@ -1888,40 +1888,52 @@ int tscProcessMultiMeterMetaRsp(SSqlObj *pSql) {
 }
 
 int tscProcessSTableVgroupRsp(SSqlObj *pSql) {
-  STableMetaDnode* dnodes = NULL;
   SBuffer buf;
   jmp_buf jb;
   tbufSetup( &buf, &jb, NULL, true );
 
   int32_t code = setjmp( jb );
   if( code != 0 ) {
-    if (dnodes != NULL) {
-      // TODO: free it
-    }
     return code;
   }
 
   tbufBeginRead( &buf, pSql->res.pRsp, pSql->res.rspLen );
   uint32_t numOfDnodes = tbufReadUint32( &buf );
-  dnodes = malloc( sizeof(STableMetaDnode) * numOfDnodes );
+  STableMetaDnode* dnodes = (STableMetaDnode*)calloc( numOfDnodes, sizeof(STableMetaDnode) );
   if( dnodes == NULL ) {
     longjmp( jb, TSDB_CODE_CLI_OUT_OF_MEMORY );
   }
 
+  SSqlCmd* pCmd = &pSql->cmd;
+  STableMetaInfo* pInfo = tscGetTableMetaInfoFromCmd( pCmd, pCmd->clauseIndex, 0 );
+
+  assert( pInfo->numOfDnodes == 0 );
+  assert( pInfo->dnodes == NULL );
+
+  pInfo->numOfDnodes = numOfDnodes;
+  pInfo->dnodes = dnodes;
+
   for( uint32_t i = 0; i < numOfDnodes; i++ ) {
     uint32_t numOfVgroups = tbufReadUint32( &buf );
     STableMetaDnode *dnode = dnodes + i;
+    dnodes->vgroups = (STableMetaVgroup*)calloc( numOfVgroups, sizeof(STableMetaVgroup) );
+    if( dnodes->vgroups == NULL ) {
+      longjmp( jb, TSDB_CODE_CLI_OUT_OF_MEMORY );
+    }
     dnode->numOfVgroups = numOfVgroups;
-    dnodes->vgroups = malloc( sizeof(STableMetaVgroup) * numOfVgroups );
 
     for( uint32_t j = 0; j < numOfVgroups; j++ ) {
       STableMetaVgroup* vgroup = dnodes->vgroups + j;
       vgroup->vgId = tbufReadInt32( &buf );
       vgroup->ip = tbufReadUint32( &buf );
       vgroup->port = tbufReadUint16( &buf );
+
       uint32_t numOfTables = tbufReadUint32( &buf );
+      vgroup->tables = (STableMetaChildTable*)calloc( numOfTables, sizeof(STableMetaChildTable) );
+      if( vgroup->tables == NULL ) {
+        longjmp( jb, TSDB_CODE_CLI_OUT_OF_MEMORY );
+      }
       vgroup->numOfTables = numOfTables;
-      vgroup->tables = malloc( sizeof(STableMetaChildTable) * numOfTables );
 
       for( uint32_t k = 0; k < numOfTables; k++ ) {
         STableMetaChildTable* table = vgroup->tables + k;
@@ -1931,11 +1943,6 @@ int tscProcessSTableVgroupRsp(SSqlObj *pSql) {
       }
     }
   }
-
-  SSqlCmd* pCmd = &pSql->cmd;
-  STableMetaInfo* pInfo = tscGetTableMetaInfoFromCmd(pCmd, pCmd->clauseIndex, 0);
-  pInfo->numOfDnodes = numOfDnodes;
-  pInfo->dnodes = dnodes;
 
   return 0;
 }

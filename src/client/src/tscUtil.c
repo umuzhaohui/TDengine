@@ -1923,6 +1923,16 @@ void doRemoveMeterMetaInfo(SQueryInfo* pQueryInfo, int32_t index, bool removeFro
   STableMetaInfo* pTableMetaInfo = tscGetMetaInfo(pQueryInfo, index);
 
   tscClearMeterMetaInfo(pTableMetaInfo, removeFromCache);
+
+  for( uint32_t i = 0; i < pTableMetaInfo->numOfDnodes; i++ ) {
+    STableMetaDnode* dnode = pTableMetaInfo->dnodes + i;
+    for( uint32_t j = 0; j < dnode->numOfVgroups; j++ ) {
+      STableMetaVgroup* vgroup = dnode->vgroups + j;
+      tfree( vgroup->tables );
+    }
+    tfree( dnode->vgroups );
+  }
+  tfree( pTableMetaInfo->dnodes )
   free(pTableMetaInfo);
 
   int32_t after = pQueryInfo->numOfTables - index - 1;
