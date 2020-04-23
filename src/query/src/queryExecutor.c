@@ -5228,7 +5228,7 @@ static char *createTableIdList(SQueryTableMsg *pQueryMsg, char *pMsg, SArray **p
  * @return
  */
 static int32_t convertQueryMsg(SQueryTableMsg *pQueryMsg, SArray **pTableIdList, SSqlFuncMsg ***pExpr,
-                               char **tagCond, SColIndex **groupbyCols) {
+                               char **tagCond, char** tbnameCond, SColIndex **groupbyCols) {
   pQueryMsg->numOfTables = htonl(pQueryMsg->numOfTables);
 
   pQueryMsg->window.skey = htobe64(pQueryMsg->window.skey);
@@ -5964,10 +5964,10 @@ int32_t qCreateQueryInfo(void *tsdb, SQueryTableMsg *pQueryMsg, qinfo_t *pQInfo)
   int32_t code = TSDB_CODE_SUCCESS;
   
   char* tagCond = NULL, *tbnameCond = NULL;
-  SArray *pTableIdList = NULL;
-  SSqlFuncExprMsg** pExprMsg = NULL;
-  SColIndex* pGroupColIndex = NULL;
-  
+  SArray *          pTableIdList = NULL;
+  SSqlFuncMsg **pExprMsg = NULL;
+  SColIndex *       pGroupColIndex = NULL;
+
   if ((code = convertQueryMsg(pQueryMsg, &pTableIdList, &pExprMsg, &tagCond, &tbnameCond, &pGroupColIndex)) != TSDB_CODE_SUCCESS) {
     return code;
   }
