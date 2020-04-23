@@ -5388,6 +5388,7 @@ static int32_t convertQueryMsg(SQueryTableMsg *pQueryMsg, SArray **pTableIdList,
   if (pQueryMsg->tagCondLen > 0) {
     *tagCond = calloc(1, pQueryMsg->tagCondLen);
     memcpy(*tagCond, pMsg, pQueryMsg->tagCondLen);
+    pMsg += pQueryMsg->tagCondLen;
   }
 
   if (*pMsg != 0) {
