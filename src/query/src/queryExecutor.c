@@ -5885,15 +5885,27 @@ static void freeQInfo(SQInfo *pQInfo) {
   }
 
   tfree(pQuery->pGroupbyExpr);
-  tfree(pQuery);
 
   int32_t numOfGroups = taosArrayGetSize(pQInfo->groupInfo.pGroupList);
   for (int32_t i = 0; i < numOfGroups; ++i) {
-    SArray *p = taosArrayGetP(pQInfo->groupInfo.pGroupList, i);
-    taosArrayDestroy(p);
+    SArray *group = taosArrayGetP(pQInfo->groupInfo.pGroupList, i);
+    size_t s = taosArrayGetSize(group);
+    for(size_t j = 0; j < s; j++) {
+      SPair *p = (SPair*)taosArrayGet(group, j);
+      STableDataInfo* pInfo = p->sec;
+      if (pInfo != NULL) {
+        SWindowResInfo *resInfo = &pInfo->pTableQInfo->windowResInfo;
+        cleanupTimeWindowInfo(resInfo, pQuery->numOfOutput);
+        free(pInfo->pTableQInfo);
+        free(pInfo);
+      }
+    }
+
+    taosArrayDestroy(group);
   }
 
   taosArrayDestroy(pQInfo->groupInfo.pGroupList);
+  tfree(pQuery);
 
   qTrace("QInfo:%p QInfo is freed", pQInfo);
 
